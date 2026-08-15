@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TAPD 坐标提取与复制
 // @namespace    tapd-coordinate-tools
-// @version      1.1.4
+// @version      1.1.5
 // @description  汇总 TAPD 标题和详细内容中的 XYZ 坐标，支持定位与单值复制
 // @updateURL    https://raw.githubusercontent.com/keli2311/tapd-coordinate-copy/main/tapd-coordinate-copy.user.js
 // @downloadURL  https://raw.githubusercontent.com/keli2311/tapd-coordinate-copy/main/tapd-coordinate-copy.user.js
@@ -36,7 +36,7 @@
     #${ROOT_ID} .tcp-row:hover { border-color:#1769aa; background:#f2f8fd; }
     #${ROOT_ID} .tcp-source { overflow:hidden; margin-bottom:6px; color:#4b5563; white-space:nowrap; text-overflow:ellipsis; }
     #${ROOT_ID} .tcp-coords { display:flex; gap:6px; flex-wrap:wrap; }
-    #${ROOT_ID} .tcp-value { padding:2px 5px; border:1px solid #cbd5e1; border-radius:3px; color:#0f4c81; background:#fff; cursor:copy; }
+    #${ROOT_ID} .tcp-value { min-height:28px; padding:4px 8px; border:1px solid #cbd5e1; border-radius:4px; color:#0f4c81; background:#fff; font-size:13px; cursor:copy; }
     #${ROOT_ID} .tcp-value:hover { background:#e8f3fb; }
     #${ROOT_ID} .tcp-foot { padding:7px 10px; border-top:1px solid #edf0f2; color:#6b7280; font-size:11px; }
   `);
