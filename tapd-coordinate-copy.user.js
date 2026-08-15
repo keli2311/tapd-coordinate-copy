@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TAPD 坐标提取与复制
 // @namespace    tapd-coordinate-tools
-// @version      1.3.0
+// @version      1.3.1
 // @description  汇总 TAPD 标题和详细内容中的 XYZ 坐标，支持定位与单值复制
 // @updateURL    https://raw.githubusercontent.com/keli2311/tapd-coordinate-copy/main/tapd-coordinate-copy.user.js
 // @downloadURL  https://raw.githubusercontent.com/keli2311/tapd-coordinate-copy/main/tapd-coordinate-copy.user.js
@@ -146,7 +146,7 @@
         if (unique.has(key)) return;
         const candidates = [...root.querySelectorAll?.('p, div, li, td, blockquote, pre, h1, h2, h3') || []]
           .filter((el) => (el.innerText || el.textContent || '').includes(coord.raw))
-          .sort((a, b) => (a.innerText || a.textContent || '').length - (b.innerText || b.textContent || '').length);
+          .sort(byTextLengthThenDepth);
         unique.set(key, { el: candidates[0] || root, label, text: coord.raw, coord, index: 0 });
       });
       previews.forEach((panel) => {
@@ -172,7 +172,7 @@
         let anchorText = coord.raw;
         const candidates = [...root.querySelectorAll('div, p, li, td, blockquote, pre, [contenteditable="true"], .cherry-editor-content, h1, h2, h3')]
           .filter((el) => (el.innerText || el.textContent || '').includes(coord.raw));
-        candidates.sort((a, b) => (a.innerText || a.textContent || '').length - (b.innerText || b.textContent || '').length);
+        candidates.sort(byTextLengthThenDepth);
         if (candidates[0]) { anchor = candidates[0]; anchorText = textOf(candidates[0]); }
         if (!belongsToPreview(anchor, previews)) return;
         const titleText = doc === document ? textOf(doc.querySelector('h1, [class*="title" i]')) : '';
@@ -197,16 +197,25 @@
     return text.includes(needle) || text.replace(/\s+/g, '').includes(needle.replace(/\s+/g, ''));
   }
 
+  function byTextLengthThenDepth(a, b) {
+    const la = (a.innerText || a.textContent || '').length;
+    const lb = (b.innerText || b.textContent || '').length;
+    if (la !== lb) return la - lb;
+    if (b.contains?.(a)) return -1; // a is deeper
+    if (a.contains?.(b)) return 1;  // b is deeper
+    return 0;
+  }
+
   function smallestContainers(root, raw, selector) {
     return [...root.querySelectorAll(selector)]
       .filter((el) => containsCoordText(el, raw))
-      .sort((a, b) => (a.innerText || a.textContent || '').length - (b.innerText || b.textContent || '').length);
+      .sort(byTextLengthThenDepth);
   }
 
   function deepestTextContainer(el, raw) {
     if (!el || !el.querySelectorAll) return el;
     const candidates = [el, ...el.querySelectorAll('*')].filter((node) => containsCoordText(node, raw));
-    candidates.sort((a, b) => (a.innerText || a.textContent || '').length - (b.innerText || b.textContent || '').length);
+    candidates.sort(byTextLengthThenDepth);
     return candidates[0] || el;
   }
 
