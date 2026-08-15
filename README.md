@@ -1,7 +1,10 @@
 # TAPD 坐标复制脚本
 
-这是一个 Tampermonkey/油猴脚本。安装 `tapd-coordinate-copy.user.js` 后打开或刷新 TAPD 缺陷详情页，页面右侧会出现“ TAPD 坐标汇总”窗口。
+这是一个 Tampermonkey/油猴脚本。安装 `tapd-coordinate-copy.user.js` 后打开或刷新 TAPD 页面，右下角会显示坐标汇总窗口。
 
 - 自动扫描标题和详细内容中的 `(X=...,Y=...,Z=...)` 坐标。
+- 坐标原文只显示坐标本身，X/Y/Z 复制按钮水平排列。
 - 点击 `X`、`Y` 或 `Z` 数值会直接复制该数字。
-- 动态加载正文后可点击“刷新”重新扫描。
+- 在 TAPD 缺陷列表页仅扫描带 `dialog_preview_id` 的侧面预览窗口。
+- 普通缺陷列表页不显示汇总窗口。
+- 汇总窗口固定在页面右下角。
