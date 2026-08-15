@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TAPD 坐标提取与复制
 // @namespace    tapd-coordinate-tools
-// @version      1.2.4
+// @version      1.2.5
 // @description  汇总 TAPD 标题和详细内容中的 XYZ 坐标，支持定位与单值复制
 // @updateURL    https://raw.githubusercontent.com/keli2311/tapd-coordinate-copy/main/tapd-coordinate-copy.user.js
 // @downloadURL  https://raw.githubusercontent.com/keli2311/tapd-coordinate-copy/main/tapd-coordinate-copy.user.js
@@ -101,8 +101,9 @@
   }
 
   function shouldRun() {
-    const isBugList = location.pathname.includes('/bug/list');
-    return !isBugList || new URLSearchParams(location.search).has('dialog_preview_id');
+    const isPreview = location.pathname.includes('/bug/list') && new URLSearchParams(location.search).has('dialog_preview_id');
+    const isBugDetail = /\/bug\/detail\//.test(location.pathname);
+    return isPreview || isBugDetail;
   }
 
   function belongsToPreview(el, containers) {
