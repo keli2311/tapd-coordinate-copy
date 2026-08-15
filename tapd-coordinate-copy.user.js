@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TAPD 坐标提取与复制
 // @namespace    tapd-coordinate-tools
-// @version      1.2.3
+// @version      1.2.4
 // @description  汇总 TAPD 标题和详细内容中的 XYZ 坐标，支持定位与单值复制
 // @updateURL    https://raw.githubusercontent.com/keli2311/tapd-coordinate-copy/main/tapd-coordinate-copy.user.js
 // @downloadURL  https://raw.githubusercontent.com/keli2311/tapd-coordinate-copy/main/tapd-coordinate-copy.user.js
@@ -38,7 +38,8 @@
     #${ROOT_ID} .tcp-coords { display:flex; gap:6px; flex-wrap:nowrap; }
     #${ROOT_ID} .tcp-value { flex:1 1 0; min-width:0; min-height:28px; padding:4px 8px; border:1px solid #cbd5e1; border-radius:4px; color:#0f4c81; background:#fff; font-size:13px; cursor:copy; }
     #${ROOT_ID} .tcp-value:hover { background:#e8f3fb; }
-    #${ROOT_ID} .tcp-foot { padding:7px 10px; border-top:1px solid #edf0f2; color:#6b7280; font-size:11px; }
+    #${ROOT_ID} .tcp-foot { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:6px 8px 7px 10px; border-top:1px solid #edf0f2; color:#6b7280; font-size:11px; }
+    #${ROOT_ID} .tcp-hint { overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
   `);
 
   function textOf(el) { return (el?.innerText || el?.textContent || '').replace(/\s+/g, ' ').trim(); }
@@ -198,7 +199,7 @@
     if (!root) return;
     const body = root.querySelector('.tcp-body');
     body.replaceChildren();
-    if (!records.length) { body.innerHTML = '<div class="tcp-empty">未找到坐标</div>'; root.querySelector('.tcp-foot').textContent = '点击“刷新”重新扫描当前页面'; return; }
+    if (!records.length) { body.innerHTML = '<div class="tcp-empty">未找到坐标</div>'; root.querySelector('.tcp-hint').textContent = '等待预览内容加载'; return; }
     records.forEach((record, i) => {
       const row = document.createElement('div'); row.className = 'tcp-row';
       const source = document.createElement('div'); source.className = 'tcp-source'; source.textContent = `${i + 1}. ${record.text}`;
@@ -206,18 +207,16 @@
       [['X', record.coord.x], ['Y', record.coord.y], ['Z', record.coord.z]].forEach(([axis, value]) => { const btn = document.createElement('button'); btn.className = 'tcp-value'; btn.textContent = `${axis}: ${value}`; btn.title = `复制 ${axis} 坐标`; btn.addEventListener('click', (e) => { e.stopPropagation(); copy(value, btn); }); coords.append(btn); });
       row.append(source, coords); row.addEventListener('click', () => jump(record.el, record.coord.raw)); body.append(row);
     });
-    root.querySelector('.tcp-foot').textContent = `共 ${records.length} 组坐标 · 点击数值复制`;
+    root.querySelector('.tcp-hint').textContent = `共 ${records.length} 组坐标 · 点击数值复制`;
   }
 
   function createPanel() {
     if (!shouldRun()) return;
     if (document.getElementById(ROOT_ID)) return;
     const root = document.createElement('aside'); root.id = ROOT_ID;
-    root.innerHTML = '<div class="tcp-head"><span class="tcp-title">TAPD 坐标汇总</span><span class="tcp-actions"><button class="tcp-close">×</button></span></div><div class="tcp-body"></div><div class="tcp-foot"></div>';
+    root.innerHTML = '<div class="tcp-body"></div><div class="tcp-foot"><span class="tcp-hint"></span><button class="tcp-close" title="关闭">×</button></div>';
     document.body.append(root);
     root.querySelector('.tcp-close').addEventListener('click', () => { manuallyClosed = true; root.remove(); });
-    const head = root.querySelector('.tcp-head'); let drag;
-    head.addEventListener('mousedown', (e) => { if (e.target.closest('button')) return; const r = root.getBoundingClientRect(); drag = { x: e.clientX - r.left, y: e.clientY - r.top }; const move = (ev) => { root.style.left = `${ev.clientX - drag.x}px`; root.style.top = `${ev.clientY - drag.y}px`; root.style.right = 'auto'; }; const up = () => { drag = null; document.removeEventListener('mousemove', move); document.removeEventListener('mouseup', up); }; document.addEventListener('mousemove', move); document.addEventListener('mouseup', up); });
     scan();
   }
 
