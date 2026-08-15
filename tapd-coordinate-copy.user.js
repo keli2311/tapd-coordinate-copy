@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TAPD 坐标提取与复制
 // @namespace    tapd-coordinate-tools
-// @version      1.2.1
+// @version      1.2.3
 // @description  汇总 TAPD 标题和详细内容中的 XYZ 坐标，支持定位与单值复制
 // @updateURL    https://raw.githubusercontent.com/keli2311/tapd-coordinate-copy/main/tapd-coordinate-copy.user.js
 // @downloadURL  https://raw.githubusercontent.com/keli2311/tapd-coordinate-copy/main/tapd-coordinate-copy.user.js
@@ -21,13 +21,13 @@
   const trackedFrames = new WeakSet();
 
   GM_addStyle(`
-    #${ROOT_ID} { position:fixed; z-index:2147483647; top:72px; right:18px; width:440px; max-height:calc(100vh - 96px); display:flex; flex-direction:column; color:#202124; background:#fff; border:1px solid #d9dce1; border-radius:8px; box-shadow:0 8px 28px rgba(0,0,0,.18); font:13px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif; }
+    #${ROOT_ID} { position:fixed; z-index:2147483647; right:18px; bottom:18px; width:440px; max-height:calc(100vh - 42px); display:flex; flex-direction:column; color:#202124; background:#fff; border:1px solid #d9dce1; border-radius:8px; box-shadow:0 8px 28px rgba(0,0,0,.18); font:13px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif; }
     #${ROOT_ID} * { box-sizing:border-box; }
-    #${ROOT_ID} .tcp-head { display:flex; align-items:center; justify-content:space-between; padding:10px 12px; color:#fff; background:#1769aa; border-radius:8px 8px 0 0; cursor:move; user-select:none; }
-    #${ROOT_ID} .tcp-title { font-weight:600; }
+    #${ROOT_ID} .tcp-head { display:flex; align-items:center; justify-content:flex-end; min-height:28px; padding:3px 6px 0; background:#fff; border-radius:8px 8px 0 0; cursor:move; user-select:none; }
+    #${ROOT_ID} .tcp-title { display:none; }
     #${ROOT_ID} .tcp-actions { display:flex; gap:5px; }
-    #${ROOT_ID} button { border:0; border-radius:4px; padding:4px 8px; color:inherit; background:rgba(255,255,255,.18); cursor:pointer; }
-    #${ROOT_ID} button:hover { background:rgba(255,255,255,.32); }
+    #${ROOT_ID} button { border:0; border-radius:4px; padding:3px 7px; color:#6b7280; background:#f1f3f5; cursor:pointer; }
+    #${ROOT_ID} button:hover { background:#e2e6ea; color:#202124; }
     #${ROOT_ID} .tcp-body { overflow:auto; padding:8px; }
     #${ROOT_ID} .tcp-empty { padding:20px 8px; color:#6b7280; text-align:center; }
     #${ROOT_ID} .tcp-section { margin:0 0 9px; }
