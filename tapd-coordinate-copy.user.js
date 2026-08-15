@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TAPD 坐标提取与复制
 // @namespace    tapd-coordinate-tools
-// @version      1.1.5
+// @version      1.2.1
 // @description  汇总 TAPD 标题和详细内容中的 XYZ 坐标，支持定位与单值复制
 // @updateURL    https://raw.githubusercontent.com/keli2311/tapd-coordinate-copy/main/tapd-coordinate-copy.user.js
 // @downloadURL  https://raw.githubusercontent.com/keli2311/tapd-coordinate-copy/main/tapd-coordinate-copy.user.js
@@ -21,7 +21,7 @@
   const trackedFrames = new WeakSet();
 
   GM_addStyle(`
-    #${ROOT_ID} { position:fixed; z-index:2147483647; top:72px; right:18px; width:390px; max-height:calc(100vh - 96px); display:flex; flex-direction:column; color:#202124; background:#fff; border:1px solid #d9dce1; border-radius:8px; box-shadow:0 8px 28px rgba(0,0,0,.18); font:13px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif; }
+    #${ROOT_ID} { position:fixed; z-index:2147483647; top:72px; right:18px; width:440px; max-height:calc(100vh - 96px); display:flex; flex-direction:column; color:#202124; background:#fff; border:1px solid #d9dce1; border-radius:8px; box-shadow:0 8px 28px rgba(0,0,0,.18); font:13px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif; }
     #${ROOT_ID} * { box-sizing:border-box; }
     #${ROOT_ID} .tcp-head { display:flex; align-items:center; justify-content:space-between; padding:10px 12px; color:#fff; background:#1769aa; border-radius:8px 8px 0 0; cursor:move; user-select:none; }
     #${ROOT_ID} .tcp-title { font-weight:600; }
@@ -34,14 +34,25 @@
     #${ROOT_ID} .tcp-section-label { margin:5px 2px; color:#6b7280; font-size:11px; }
     #${ROOT_ID} .tcp-row { margin:4px 0; padding:8px; border:1px solid #e6e8eb; border-radius:6px; background:#fafbfc; cursor:pointer; }
     #${ROOT_ID} .tcp-row:hover { border-color:#1769aa; background:#f2f8fd; }
-    #${ROOT_ID} .tcp-source { overflow:hidden; margin-bottom:6px; color:#4b5563; white-space:nowrap; text-overflow:ellipsis; }
-    #${ROOT_ID} .tcp-coords { display:flex; gap:6px; flex-wrap:wrap; }
-    #${ROOT_ID} .tcp-value { min-height:28px; padding:4px 8px; border:1px solid #cbd5e1; border-radius:4px; color:#0f4c81; background:#fff; font-size:13px; cursor:copy; }
+    #${ROOT_ID} .tcp-source { margin-bottom:6px; color:#6b7280; font-size:12px; }
+    #${ROOT_ID} .tcp-coords { display:flex; gap:6px; flex-wrap:nowrap; }
+    #${ROOT_ID} .tcp-value { flex:1 1 0; min-width:0; min-height:28px; padding:4px 8px; border:1px solid #cbd5e1; border-radius:4px; color:#0f4c81; background:#fff; font-size:13px; cursor:copy; }
     #${ROOT_ID} .tcp-value:hover { background:#e8f3fb; }
     #${ROOT_ID} .tcp-foot { padding:7px 10px; border-top:1px solid #edf0f2; color:#6b7280; font-size:11px; }
   `);
 
   function textOf(el) { return (el?.innerText || el?.textContent || '').replace(/\s+/g, ' ').trim(); }
+
+  function contextText(text, raw) {
+    const value = String(text || '');
+    const at = value.indexOf(raw);
+    if (at < 0) return raw;
+    const lineStart = Math.max(value.lastIndexOf('\n', at), value.lastIndexOf('\r', at)) + 1;
+    const nextRelative = value.slice(at + raw.length).search(/[\r\n]/);
+    const nextLine = nextRelative < 0 ? -1 : at + raw.length + nextRelative;
+    const line = value.slice(lineStart, nextLine < 0 ? value.length : nextLine).trim();
+    return line.length > 220 ? `${line.slice(0, 217)}...` : line;
+  }
 
   function parse(text) {
     const found = [];
@@ -69,6 +80,15 @@
       if (el.shadowRoot) { roots.push(el.shadowRoot); visit(el.shadowRoot); }
     });
     visit(rootDocument);
+    return roots;
+  }
+
+  function previewRoots(panel) {
+    const roots = [panel];
+    const visit = (root) => root.querySelectorAll?.('*').forEach((el) => {
+      if (el.shadowRoot) { roots.push(el.shadowRoot); visit(el.shadowRoot); }
+    });
+    visit(panel);
     return roots;
   }
 
@@ -125,12 +145,14 @@
         const candidates = [...root.querySelectorAll?.('p, div, li, td, blockquote, pre, h1, h2, h3') || []]
           .filter((el) => (el.innerText || el.textContent || '').includes(coord.raw))
           .sort((a, b) => (a.innerText || a.textContent || '').length - (b.innerText || b.textContent || '').length);
-        unique.set(key, { el: candidates[0] || root, label, text: label === '标题' ? text : coord.raw, coord, index: 0 });
+        unique.set(key, { el: candidates[0] || root, label, text: coord.raw, coord, index: 0 });
       });
       previews.forEach((panel) => {
-        addPreviewText(panel.innerText || panel.textContent || '', panel);
-        panel.querySelectorAll('iframe').forEach((frame) => {
-          try { if (frame.contentDocument?.body) addPreviewText(frame.contentDocument.body.innerText || frame.contentDocument.body.textContent || '', frame.contentDocument, '详细内容'); } catch (_) {}
+        previewRoots(panel).forEach((previewRoot) => {
+          addPreviewText(previewRoot.innerText || previewRoot.textContent || '', previewRoot);
+          previewRoot.querySelectorAll?.('iframe').forEach((frame) => {
+            try { if (frame.contentDocument?.body) addPreviewText(frame.contentDocument.body.innerText || frame.contentDocument.body.textContent || '', frame.contentDocument, '详细内容'); } catch (_) {}
+          });
         });
       });
       records = [...unique.values()];
@@ -153,7 +175,7 @@
         if (!belongsToPreview(anchor, previews)) return;
         const titleText = doc === document ? textOf(doc.querySelector('h1, [class*="title" i]')) : '';
         const isTitle = titleText.includes(coord.raw);
-        unique.set(key, { el: anchor, label: isTitle ? '标题' : '详细内容', text: isTitle ? titleText : coord.raw, coord, index: 0 });
+        unique.set(key, { el: anchor, label: isTitle ? '标题' : '详细内容', text: coord.raw, coord, index: 0 });
       }));
       });
     });
@@ -177,9 +199,7 @@
     const body = root.querySelector('.tcp-body');
     body.replaceChildren();
     if (!records.length) { body.innerHTML = '<div class="tcp-empty">未找到坐标</div>'; root.querySelector('.tcp-foot').textContent = '点击“刷新”重新扫描当前页面'; return; }
-    let lastLabel = '';
     records.forEach((record, i) => {
-      if (record.label !== lastLabel) { const section = document.createElement('div'); section.className = 'tcp-section-label'; section.textContent = record.label; body.append(section); lastLabel = record.label; }
       const row = document.createElement('div'); row.className = 'tcp-row';
       const source = document.createElement('div'); source.className = 'tcp-source'; source.textContent = `${i + 1}. ${record.text}`;
       const coords = document.createElement('div'); coords.className = 'tcp-coords';
@@ -193,9 +213,8 @@
     if (!shouldRun()) return;
     if (document.getElementById(ROOT_ID)) return;
     const root = document.createElement('aside'); root.id = ROOT_ID;
-    root.innerHTML = '<div class="tcp-head"><span class="tcp-title">TAPD 坐标汇总</span><span class="tcp-actions"><button class="tcp-refresh">刷新</button><button class="tcp-close">×</button></span></div><div class="tcp-body"></div><div class="tcp-foot"></div>';
+    root.innerHTML = '<div class="tcp-head"><span class="tcp-title">TAPD 坐标汇总</span><span class="tcp-actions"><button class="tcp-close">×</button></span></div><div class="tcp-body"></div><div class="tcp-foot"></div>';
     document.body.append(root);
-    root.querySelector('.tcp-refresh').addEventListener('click', scan);
     root.querySelector('.tcp-close').addEventListener('click', () => { manuallyClosed = true; root.remove(); });
     const head = root.querySelector('.tcp-head'); let drag;
     head.addEventListener('mousedown', (e) => { if (e.target.closest('button')) return; const r = root.getBoundingClientRect(); drag = { x: e.clientX - r.left, y: e.clientY - r.top }; const move = (ev) => { root.style.left = `${ev.clientX - drag.x}px`; root.style.top = `${ev.clientY - drag.y}px`; root.style.right = 'auto'; }; const up = () => { drag = null; document.removeEventListener('mousemove', move); document.removeEventListener('mouseup', up); }; document.addEventListener('mousemove', move); document.addEventListener('mouseup', up); });
@@ -222,6 +241,9 @@
   // Re-scan a few times because iframe mutations are not visible to the
   // parent document's MutationObserver.
   [500, 1500, 3000, 6000].forEach((delay) => setTimeout(scan, delay));
+  setInterval(() => {
+    if (!manuallyClosed && shouldRun() && previewContainers().length) scan();
+  }, 2500);
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => { if (location.pathname.includes('/bug/list')) schedulePanel(); else createPanel(); });
   else if (location.pathname.includes('/bug/list')) schedulePanel();
   else createPanel();
