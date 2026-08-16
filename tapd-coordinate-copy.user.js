@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TAPD 坐标提取与复制
 // @namespace    tapd-coordinate-tools
-// @version      1.3.3
+// @version      1.3.4
 // @description  汇总 TAPD 标题和详细内容中的 XYZ 坐标，支持定位与单值复制
 // @updateURL    https://raw.githubusercontent.com/keli2311/tapd-coordinate-copy/main/tapd-coordinate-copy.user.js
 // @downloadURL  https://raw.githubusercontent.com/keli2311/tapd-coordinate-copy/main/tapd-coordinate-copy.user.js
@@ -208,7 +208,7 @@
 
   function smallestContainers(root, raw, selector) {
     return [...root.querySelectorAll(selector)]
-      .filter((el) => containsCoordText(el, raw))
+      .filter((el) => !el.closest?.(`#${ROOT_ID}`) && containsCoordText(el, raw))
       .sort(byTextLengthThenDepth);
   }
 
