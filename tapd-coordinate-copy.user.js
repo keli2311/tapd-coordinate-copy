@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TAPD 坐标提取与复制
 // @namespace    tapd-coordinate-tools
-// @version      1.2.5
+// @version      1.3.3
 // @description  汇总 TAPD 标题和详细内容中的 XYZ 坐标，支持定位与单值复制
 // @updateURL    https://raw.githubusercontent.com/keli2311/tapd-coordinate-copy/main/tapd-coordinate-copy.user.js
 // @downloadURL  https://raw.githubusercontent.com/keli2311/tapd-coordinate-copy/main/tapd-coordinate-copy.user.js
@@ -146,7 +146,7 @@
         if (unique.has(key)) return;
         const candidates = [...root.querySelectorAll?.('p, div, li, td, blockquote, pre, h1, h2, h3') || []]
           .filter((el) => (el.innerText || el.textContent || '').includes(coord.raw))
-          .sort((a, b) => (a.innerText || a.textContent || '').length - (b.innerText || b.textContent || '').length);
+          .sort(byTextLengthThenDepth);
         unique.set(key, { el: candidates[0] || root, label, text: coord.raw, coord, index: 0 });
       });
       previews.forEach((panel) => {
@@ -172,7 +172,7 @@
         let anchorText = coord.raw;
         const candidates = [...root.querySelectorAll('div, p, li, td, blockquote, pre, [contenteditable="true"], .cherry-editor-content, h1, h2, h3')]
           .filter((el) => (el.innerText || el.textContent || '').includes(coord.raw));
-        candidates.sort((a, b) => (a.innerText || a.textContent || '').length - (b.innerText || b.textContent || '').length);
+        candidates.sort(byTextLengthThenDepth);
         if (candidates[0]) { anchor = candidates[0]; anchorText = textOf(candidates[0]); }
         if (!belongsToPreview(anchor, previews)) return;
         const titleText = doc === document ? textOf(doc.querySelector('h1, [class*="title" i]')) : '';
@@ -191,8 +191,128 @@
     navigator.clipboard?.writeText(value).then(done).catch(() => {});
   }
 
+  function containsCoordText(el, raw) {
+    const text = (el.innerText || el.textContent || '').replace(/\s+/g, ' ').trim();
+    const needle = raw.replace(/\s+/g, ' ').trim();
+    return text.includes(needle) || text.replace(/\s+/g, '').includes(needle.replace(/\s+/g, ''));
+  }
+
+  function byTextLengthThenDepth(a, b) {
+    const la = (a.innerText || a.textContent || '').length;
+    const lb = (b.innerText || b.textContent || '').length;
+    if (la !== lb) return la - lb;
+    if (b.contains?.(a)) return -1; // a is deeper
+    if (a.contains?.(b)) return 1;  // b is deeper
+    return 0;
+  }
+
+  function smallestContainers(root, raw, selector) {
+    return [...root.querySelectorAll(selector)]
+      .filter((el) => containsCoordText(el, raw))
+      .sort(byTextLengthThenDepth);
+  }
+
+  function deepestTextContainer(el, raw) {
+    if (!el || !el.querySelectorAll) return el;
+    const candidates = [el, ...el.querySelectorAll('*')].filter((node) => containsCoordText(node, raw));
+    candidates.sort(byTextLengthThenDepth);
+    return candidates[0] || el;
+  }
+
+  function findAnchorFor(raw) {
+    const previews = previewContainers();
+    if (previews.length) {
+      for (const panel of previews) {
+        for (const root of previewRoots(panel)) {
+          const found = smallestContainers(root, raw, 'p, div, li, td, blockquote, pre, h1, h2, h3');
+          if (found[0]) return found[0];
+          // TinyMCE / iframe 编辑器内容也在预览抽屉中，扫描 iframe 内部。
+          for (const frame of [...(root.querySelectorAll?.('iframe') || [])]) {
+            try {
+              const child = frame.contentDocument || frame.contentWindow?.document;
+              if (!child || child === panel.ownerDocument) continue;
+              const frameFound = smallestContainers(child, raw, 'p, div, li, td, blockquote, pre, h1, h2, h3');
+              if (frameFound[0]) return frameFound[0];
+            } catch (_) { /* cross-origin frame */ }
+          }
+        }
+      }
+      return null;
+    }
+    let anchor = null;
+    documentsIn(document).forEach((doc) => {
+      if (anchor) return;
+      rootsIn(doc).forEach((root) => {
+        if (anchor) return;
+        const base = root.body || root;
+        const found = smallestContainers(base, raw, 'div, p, li, td, blockquote, pre, [contenteditable="true"], .cherry-editor-content, h1, h2, h3');
+        if (found[0]) anchor = found[0];
+      });
+    });
+    return anchor;
+  }
+
+  let flashTimer = null;
+  let flashedEl = null;
+  function flash(el) {
+    if (flashedEl && flashedEl.isConnected) {
+      flashedEl.style.outline = '';
+      flashedEl.style.outlineOffset = '';
+    }
+    clearTimeout(flashTimer);
+    flashedEl = el;
+    el.style.outline = '3px solid #ff9800';
+    el.style.outlineOffset = '2px';
+    flashTimer = setTimeout(() => {
+      if (flashedEl && flashedEl.isConnected) {
+        flashedEl.style.outline = '';
+        flashedEl.style.outlineOffset = '';
+      }
+      flashedEl = null;
+    }, 1800);
+  }
+
+  function frameOf(target) {
+    let node = target;
+    while (node) {
+      try {
+        const frameEl = node.ownerDocument?.defaultView?.frameElement;
+        if (frameEl) return frameEl;
+      } catch (_) { /* cross-origin frame */ }
+      node = node.parentElement || node.parentNode;
+    }
+    return null;
+  }
+
+  function scrollContainer(container) {
+    try { container.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' }); }
+    catch (_) { container.scrollIntoView(true); }
+  }
+
   function jump(el, raw) {
-    // Intentionally no-op: row clicks no longer scroll or highlight the page.
+    const isBugDetail = /\/bug\/detail\//.test(location.pathname);
+    let target = isBugDetail ? findAnchorFor(raw) : (el && el.isConnected ? el : findAnchorFor(raw));
+    if (!target && el && el.isConnected) target = el;
+    if (!target) return;
+    target = deepestTextContainer(target, raw);
+    const frame = frameOf(target);
+    if (frame) {
+      // 坐标在 iframe（如 TinyMCE）中：先滚动外层让 iframe 可见，再滚动 iframe 内部。
+      scrollContainer(frame);
+      try { target.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' }); }
+      catch (_) { target.scrollIntoView(true); }
+      // iframe 内的元素可能被编辑器外壳遮挡，外层 iframe 也高亮，保证可见。
+      if (frame.style) {
+        const restore = frame.style.outline;
+        frame.style.outline = '3px solid #ff9800';
+        frame.style.outlineOffset = '2px';
+        setTimeout(() => { frame.style.outline = restore; frame.style.outlineOffset = ''; }, 1800);
+      }
+      try { flash(target); } catch (_) { flash(frame); }
+      return;
+    }
+    scrollContainer(target);
+    flash(target);
   }
 
   function render() {
@@ -202,13 +322,13 @@
     body.replaceChildren();
     if (!records.length) { body.innerHTML = '<div class="tcp-empty">未找到坐标</div>'; root.querySelector('.tcp-hint').textContent = '等待预览内容加载'; return; }
     records.forEach((record, i) => {
-      const row = document.createElement('div'); row.className = 'tcp-row';
+      const row = document.createElement('div'); row.className = 'tcp-row'; row.title = '点击定位到页面位置';
       const source = document.createElement('div'); source.className = 'tcp-source'; source.textContent = `${i + 1}. ${record.text}`;
       const coords = document.createElement('div'); coords.className = 'tcp-coords';
       [['X', record.coord.x], ['Y', record.coord.y], ['Z', record.coord.z]].forEach(([axis, value]) => { const btn = document.createElement('button'); btn.className = 'tcp-value'; btn.textContent = `${axis}: ${value}`; btn.title = `复制 ${axis} 坐标`; btn.addEventListener('click', (e) => { e.stopPropagation(); copy(value, btn); }); coords.append(btn); });
       row.append(source, coords); row.addEventListener('click', () => jump(record.el, record.coord.raw)); body.append(row);
     });
-    root.querySelector('.tcp-hint').textContent = `共 ${records.length} 组坐标 · 点击数值复制`;
+    root.querySelector('.tcp-hint').textContent = `共 ${records.length} 组坐标 · 点击数值复制 · 点击行定位`;
   }
 
   function createPanel() {
