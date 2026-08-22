@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         TAPD 坐标提取与复制
 // @namespace    tapd-coordinate-tools
-// @version      1.3.4
-// @description  汇总 TAPD 标题和详细内容中的 XYZ 坐标，支持定位与单值复制
+// @version      1.4.0
+// @description  汇总 TAPD 标题和详细内容中的 XYZ 坐标，兼容中英文括号/逗号与空值格式，支持定位与单值复制
 // @updateURL    https://raw.githubusercontent.com/keli2311/tapd-coordinate-copy/main/tapd-coordinate-copy.user.js
 // @downloadURL  https://raw.githubusercontent.com/keli2311/tapd-coordinate-copy/main/tapd-coordinate-copy.user.js
 // @match        https://tapd.tencent.com/*
@@ -14,7 +14,16 @@
 (function () {
   'use strict';
 
-  const COORD_RE = /\(\s*X\s*=\s*([-+]?\d+(?:\.\d+)?)\s*[,，]\s*Y\s*=\s*([-+]?\d+(?:\.\d+)?)\s*[,，]\s*Z\s*=\s*([-+]?\d+(?:\.\d+)?)\s*\)/ig;
+  const COORD_VALUE = '[-+]?(?:\\d+(?:\\.\\d*)?|\\.\\d+)?';
+  const COORD_SEP = '[,\\uFF0C]?\\s*';
+  const COORD_RE = new RegExp(
+    `[\\uFF08(]\\s*(?:` +
+      `X\\s*=\\s*(${COORD_VALUE})\\s*(?:${COORD_SEP}Y\\s*=\\s*(${COORD_VALUE})\\s*)?${COORD_SEP}Z\\s*=\\s*(${COORD_VALUE})` +
+      `|X\\s*=\\s*(${COORD_VALUE})\\s*${COORD_SEP}Y\\s*=\\s*(${COORD_VALUE})` +
+      `|Y\\s*=\\s*(${COORD_VALUE})\\s*${COORD_SEP}Z\\s*=\\s*(${COORD_VALUE})` +
+    `)\\s*[\\uFF09)]`,
+    'gi'
+  );
   const ROOT_ID = 'tapd-coordinate-panel';
   let records = [];
   let manuallyClosed = false;
@@ -55,12 +64,27 @@
     return line.length > 220 ? `${line.slice(0, 217)}...` : line;
   }
 
+  function axisValue(raw, axis) {
+    const match = new RegExp(`${axis}\\s*=\\s*(${COORD_VALUE})`, 'i').exec(raw);
+    const value = match ? match[1] : '';
+    return /[0-9]/.test(value) ? value : '';
+  }
+
   function parse(text) {
     const found = [];
     COORD_RE.lastIndex = 0;
     let match;
-    while ((match = COORD_RE.exec(text))) found.push({ x: match[1], y: match[2], z: match[3], raw: match[0] });
+    while ((match = COORD_RE.exec(text))) {
+      const x = axisValue(match[0], 'X');
+      const y = axisValue(match[0], 'Y');
+      const z = axisValue(match[0], 'Z');
+      if (x || y || z) found.push({ x, y, z, raw: match[0] });
+    }
     return found;
+  }
+
+  function coordKey(coord) {
+    return `${coord.x}|${coord.y}|${coord.z}`;
   }
 
   function documentsIn(rootDocument) {
@@ -136,13 +160,16 @@
   }
 
   function scan() {
-    if (!shouldRun()) return;
+    if (manuallyClosed || !shouldRun()) return;
     const unique = new Map();
     const previews = previewContainers();
-    if (location.pathname.includes('/bug/list') && !previews.length) return;
+    if (location.pathname.includes('/bug/list') && !previews.length) {
+      document.getElementById(ROOT_ID)?.remove();
+      return;
+    }
     if (previews.length) {
       const addPreviewText = (text, root, label = '详细内容') => parse(text).forEach((coord) => {
-        const key = coord.raw.toLowerCase().replace(/\s+/g, '');
+        const key = coordKey(coord);
         if (unique.has(key)) return;
         const candidates = [...root.querySelectorAll?.('p, div, li, td, blockquote, pre, h1, h2, h3') || []]
           .filter((el) => (el.innerText || el.textContent || '').includes(coord.raw))
@@ -157,31 +184,35 @@
           });
         });
       });
-      records = [...unique.values()];
-      render();
+    } else {
+      documentsIn(document).forEach((doc) => {
+        rootsIn(doc).forEach((root) => {
+        const base = root.body || root;
+        const sources = [base.innerText || '', base.textContent || '', base.innerHTML || ''];
+        sources.forEach((pageText) => parse(pageText).forEach((coord) => {
+          const key = coordKey(coord);
+          if (unique.has(key)) return;
+          let anchor = doc.body;
+          let anchorText = coord.raw;
+          const candidates = [...root.querySelectorAll('div, p, li, td, blockquote, pre, [contenteditable="true"], .cherry-editor-content, h1, h2, h3')]
+            .filter((el) => (el.innerText || el.textContent || '').includes(coord.raw));
+          candidates.sort(byTextLengthThenDepth);
+          if (candidates[0]) { anchor = candidates[0]; anchorText = textOf(candidates[0]); }
+          if (!belongsToPreview(anchor, previews)) return;
+          const titleText = doc === document ? textOf(doc.querySelector('h1, [class*="title" i]')) : '';
+          const isTitle = titleText.includes(coord.raw);
+          unique.set(key, { el: anchor, label: isTitle ? '标题' : '详细内容', text: coord.raw, coord, index: 0 });
+        }));
+        });
+      });
+    }
+    records = [...unique.values()];
+    if (!records.length) {
+      document.getElementById(ROOT_ID)?.remove();
       return;
     }
-    documentsIn(document).forEach((doc) => {
-      rootsIn(doc).forEach((root) => {
-      const base = root.body || root;
-      const sources = [base.innerText || '', base.textContent || '', base.innerHTML || ''];
-      sources.forEach((pageText) => parse(pageText).forEach((coord) => {
-        const key = coord.raw.toLowerCase().replace(/\s+/g, '');
-        if (unique.has(key)) return;
-        let anchor = doc.body;
-        let anchorText = coord.raw;
-        const candidates = [...root.querySelectorAll('div, p, li, td, blockquote, pre, [contenteditable="true"], .cherry-editor-content, h1, h2, h3')]
-          .filter((el) => (el.innerText || el.textContent || '').includes(coord.raw));
-        candidates.sort(byTextLengthThenDepth);
-        if (candidates[0]) { anchor = candidates[0]; anchorText = textOf(candidates[0]); }
-        if (!belongsToPreview(anchor, previews)) return;
-        const titleText = doc === document ? textOf(doc.querySelector('h1, [class*="title" i]')) : '';
-        const isTitle = titleText.includes(coord.raw);
-        unique.set(key, { el: anchor, label: isTitle ? '标题' : '详细内容', text: coord.raw, coord, index: 0 });
-      }));
-      });
-    });
-    records = [...unique.values()];
+    const root = ensurePanel();
+    if (!root) return;
     render();
   }
 
@@ -320,24 +351,28 @@
     if (!root) return;
     const body = root.querySelector('.tcp-body');
     body.replaceChildren();
-    if (!records.length) { body.innerHTML = '<div class="tcp-empty">未找到坐标</div>'; root.querySelector('.tcp-hint').textContent = '等待预览内容加载'; return; }
     records.forEach((record, i) => {
       const row = document.createElement('div'); row.className = 'tcp-row'; row.title = '点击定位到页面位置';
       const source = document.createElement('div'); source.className = 'tcp-source'; source.textContent = `${i + 1}. ${record.text}`;
       const coords = document.createElement('div'); coords.className = 'tcp-coords';
-      [['X', record.coord.x], ['Y', record.coord.y], ['Z', record.coord.z]].forEach(([axis, value]) => { const btn = document.createElement('button'); btn.className = 'tcp-value'; btn.textContent = `${axis}: ${value}`; btn.title = `复制 ${axis} 坐标`; btn.addEventListener('click', (e) => { e.stopPropagation(); copy(value, btn); }); coords.append(btn); });
+      [['X', record.coord.x], ['Y', record.coord.y], ['Z', record.coord.z]].forEach(([axis, value]) => { const btn = document.createElement('button'); btn.className = 'tcp-value'; btn.textContent = value ? `${axis}: ${value}` : `${axis}: 空`; btn.title = `复制 ${axis} 坐标`; btn.addEventListener('click', (e) => { e.stopPropagation(); copy(value, btn); }); coords.append(btn); });
       row.append(source, coords); row.addEventListener('click', () => jump(record.el, record.coord.raw)); body.append(row);
     });
     root.querySelector('.tcp-hint').textContent = `共 ${records.length} 组坐标 · 点击数值复制 · 点击行定位`;
   }
 
-  function createPanel() {
-    if (!shouldRun()) return;
-    if (document.getElementById(ROOT_ID)) return;
-    const root = document.createElement('aside'); root.id = ROOT_ID;
+  function ensurePanel() {
+    if (!shouldRun() || manuallyClosed) return null;
+    let root = document.getElementById(ROOT_ID);
+    if (root) return root;
+    root = document.createElement('aside'); root.id = ROOT_ID;
     root.innerHTML = '<div class="tcp-body"></div><div class="tcp-foot"><span class="tcp-hint"></span><button class="tcp-close" title="关闭">×</button></div>';
     document.body.append(root);
     root.querySelector('.tcp-close').addEventListener('click', () => { manuallyClosed = true; root.remove(); });
+    return root;
+  }
+
+  function createPanel() {
     scan();
   }
 
