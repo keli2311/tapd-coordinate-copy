@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TAPD 坐标提取与复制
 // @namespace    tapd-coordinate-tools
-// @version      1.3.1
+// @version      1.3.4
 // @description  汇总 TAPD 标题和详细内容中的 XYZ 坐标，支持定位与单值复制
 // @updateURL    https://raw.githubusercontent.com/keli2311/tapd-coordinate-copy/main/tapd-coordinate-copy.user.js
 // @downloadURL  https://raw.githubusercontent.com/keli2311/tapd-coordinate-copy/main/tapd-coordinate-copy.user.js
@@ -208,7 +208,7 @@
 
   function smallestContainers(root, raw, selector) {
     return [...root.querySelectorAll(selector)]
-      .filter((el) => containsCoordText(el, raw))
+      .filter((el) => !el.closest?.(`#${ROOT_ID}`) && containsCoordText(el, raw))
       .sort(byTextLengthThenDepth);
   }
 
@@ -226,6 +226,15 @@
         for (const root of previewRoots(panel)) {
           const found = smallestContainers(root, raw, 'p, div, li, td, blockquote, pre, h1, h2, h3');
           if (found[0]) return found[0];
+          // TinyMCE / iframe 编辑器内容也在预览抽屉中，扫描 iframe 内部。
+          for (const frame of [...(root.querySelectorAll?.('iframe') || [])]) {
+            try {
+              const child = frame.contentDocument || frame.contentWindow?.document;
+              if (!child || child === panel.ownerDocument) continue;
+              const frameFound = smallestContainers(child, raw, 'p, div, li, td, blockquote, pre, h1, h2, h3');
+              if (frameFound[0]) return frameFound[0];
+            } catch (_) { /* cross-origin frame */ }
+          }
         }
       }
       return null;
@@ -263,12 +272,46 @@
     }, 1800);
   }
 
+  function frameOf(target) {
+    let node = target;
+    while (node) {
+      try {
+        const frameEl = node.ownerDocument?.defaultView?.frameElement;
+        if (frameEl) return frameEl;
+      } catch (_) { /* cross-origin frame */ }
+      node = node.parentElement || node.parentNode;
+    }
+    return null;
+  }
+
+  function scrollContainer(container) {
+    try { container.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' }); }
+    catch (_) { container.scrollIntoView(true); }
+  }
+
   function jump(el, raw) {
-    let target = el && el.isConnected ? el : findAnchorFor(raw);
+    const isBugDetail = /\/bug\/detail\//.test(location.pathname);
+    let target = isBugDetail ? findAnchorFor(raw) : (el && el.isConnected ? el : findAnchorFor(raw));
+    if (!target && el && el.isConnected) target = el;
     if (!target) return;
     target = deepestTextContainer(target, raw);
-    try { target.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' }); }
-    catch (_) { target.scrollIntoView(true); }
+    const frame = frameOf(target);
+    if (frame) {
+      // 坐标在 iframe（如 TinyMCE）中：先滚动外层让 iframe 可见，再滚动 iframe 内部。
+      scrollContainer(frame);
+      try { target.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' }); }
+      catch (_) { target.scrollIntoView(true); }
+      // iframe 内的元素可能被编辑器外壳遮挡，外层 iframe 也高亮，保证可见。
+      if (frame.style) {
+        const restore = frame.style.outline;
+        frame.style.outline = '3px solid #ff9800';
+        frame.style.outlineOffset = '2px';
+        setTimeout(() => { frame.style.outline = restore; frame.style.outlineOffset = ''; }, 1800);
+      }
+      try { flash(target); } catch (_) { flash(frame); }
+      return;
+    }
+    scrollContainer(target);
     flash(target);
   }
 
