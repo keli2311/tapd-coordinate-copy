@@ -412,4 +412,3 @@
   else if (isPreviewPage()) schedulePanel();
   else createPanel();
 })();
-
