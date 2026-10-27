@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TAPD 坐标提取与复制
 // @namespace    tapd-coordinate-tools
-// @version      1.4.0
+// @version      1.4.1
 // @description  汇总 TAPD 标题和详细内容中的 XYZ 坐标，兼容中英文括号/逗号与空值格式，支持定位与单值复制
 // @updateURL    https://raw.githubusercontent.com/keli2311/tapd-coordinate-copy/main/tapd-coordinate-copy.user.js
 // @downloadURL  https://raw.githubusercontent.com/keli2311/tapd-coordinate-copy/main/tapd-coordinate-copy.user.js
@@ -117,17 +117,26 @@
     return roots;
   }
 
+  function isPreviewPage() {
+    const path = location.pathname;
+    const previewId = new URLSearchParams(location.search).get('dialog_preview_id');
+    return !!previewId?.startsWith('bug_') && (path.includes('/bug/list') || path.includes('/worktable/search'));
+  }
+
   function previewContainers() {
-    if (!location.pathname.includes('/bug/list') || !new URLSearchParams(location.search).has('dialog_preview_id')) return [];
+    if (!isPreviewPage()) return [];
+    if (location.pathname.includes('/worktable/search')) {
+      return [...document.querySelectorAll('.workitem-detail-sidepanel .el-drawer[role="dialog"]')]
+        .filter((el) => el.offsetWidth > 0 && el.offsetHeight > 0);
+    }
     return [...document.querySelectorAll('[role="dialog"], [aria-modal="true"], [class*="drawer" i], [class*="preview" i], [class*="modal" i], [data-testid*="preview" i], [style*="flex: 1 1 0%"]')]
       .filter((el) => el.offsetWidth > 0 && el.offsetHeight > 0)
       .sort((a, b) => b.getBoundingClientRect().width * b.getBoundingClientRect().height - a.getBoundingClientRect().width * a.getBoundingClientRect().height);
   }
 
   function shouldRun() {
-    const isPreview = location.pathname.includes('/bug/list') && new URLSearchParams(location.search).has('dialog_preview_id');
     const isBugDetail = /\/bug\/detail\//.test(location.pathname);
-    return isPreview || isBugDetail;
+    return isPreviewPage() || isBugDetail;
   }
 
   function belongsToPreview(el, containers) {
@@ -163,7 +172,7 @@
     if (manuallyClosed || !shouldRun()) return;
     const unique = new Map();
     const previews = previewContainers();
-    if (location.pathname.includes('/bug/list') && !previews.length) {
+    if (isPreviewPage() && !previews.length) {
       document.getElementById(ROOT_ID)?.remove();
       return;
     }
@@ -399,7 +408,7 @@
   setInterval(() => {
     if (!manuallyClosed && shouldRun() && previewContainers().length) scan();
   }, 2500);
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => { if (location.pathname.includes('/bug/list')) schedulePanel(); else createPanel(); });
-  else if (location.pathname.includes('/bug/list')) schedulePanel();
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => { if (isPreviewPage()) schedulePanel(); else createPanel(); });
+  else if (isPreviewPage()) schedulePanel();
   else createPanel();
 })();
