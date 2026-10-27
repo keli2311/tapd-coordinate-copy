@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TAPD 坐标提取与复制
 // @namespace    tapd-coordinate-tools
-// @version      1.4.1
+// @version      1.4.2
 // @description  汇总 TAPD 标题和详细内容中的 XYZ 坐标，兼容中英文括号/逗号与空值格式，支持定位与单值复制
 // @updateURL    https://raw.githubusercontent.com/keli2311/tapd-coordinate-copy/main/tapd-coordinate-copy.user.js
 // @downloadURL  https://raw.githubusercontent.com/keli2311/tapd-coordinate-copy/main/tapd-coordinate-copy.user.js
@@ -301,7 +301,7 @@
     }
     clearTimeout(flashTimer);
     flashedEl = el;
-    el.style.outline = '3px solid #ff9800';
+    el.style.outline = '3px solid #1769aa';
     el.style.outlineOffset = '2px';
     flashTimer = setTimeout(() => {
       if (flashedEl && flashedEl.isConnected) {
@@ -344,7 +344,7 @@
       // iframe 内的元素可能被编辑器外壳遮挡，外层 iframe 也高亮，保证可见。
       if (frame.style) {
         const restore = frame.style.outline;
-        frame.style.outline = '3px solid #ff9800';
+        frame.style.outline = '3px solid #1769aa';
         frame.style.outlineOffset = '2px';
         setTimeout(() => { frame.style.outline = restore; frame.style.outlineOffset = ''; }, 1800);
       }
@@ -412,3 +412,4 @@
   else if (isPreviewPage()) schedulePanel();
   else createPanel();
 })();
+
